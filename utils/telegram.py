@@ -84,3 +84,68 @@ class TelegramBot:
             "text": text,
             "parse_mode": "HTML"
         }, timeout=10)
+
+
+    def post_daily_digest(self, jobs: list, total_in_db: int) -> bool:
+        """Send a daily digest card summarising the best recent jobs."""
+        if not jobs:
+            # No jobs at all in DB yet — send a simple status ping
+            text = (
+                "📡 <b>ECE Job Bot — Daily Check-in</b>\n"
+                "━━━━━━━━━━━━━━\n"
+                "No new ECE jobs found in the last 24 hours.\n"
+                "The bot is running and will alert you the moment new jobs appear! 🔔\n"
+                "━━━━━━━━━━━━━━\n"
+                "#ECE #JobAlert #India"
+            )
+            payload = {
+                "chat_id": CHAT_ID,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            }
+        else:
+            lines = [
+                "━━━━━━━━━━━━━━",
+                "📋 <b>ECE JOBS — DAILY DIGEST</b>",
+                f"🗓 Top {len(jobs)} jobs from the last 24 hours",
+                "━━━━━━━━━━━━━━",
+            ]
+            for i, job in enumerate(jobs, 1):
+                title   = self._esc(job.get("title", "Unknown Role"))
+                company = self._esc(job.get("company", "Unknown"))
+                loc     = self._esc(job.get("location", "India"))
+                link    = job.get("link", "#")
+                lines.append(
+                    f"{i}. <b>{title}</b>\n"
+                    f"   🏢 {company} | 📍 {loc}\n"
+                    f"   🔗 <a href='{link}'>Apply Now</a>"
+                )
+            lines += [
+                "━━━━━━━━━━━━━━",
+                f"📊 <i>{total_in_db} total jobs tracked so far</i>",
+                "#ECE #Embedded #Jobs #India #DailyDigest",
+                "━━━━━━━━━━━━━━",
+            ]
+            text = "\n".join(lines)
+            payload = {
+                "chat_id": CHAT_ID,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+                "reply_markup": {
+                    "inline_keyboard": [[
+                        {"text": "🔍 Search ECE Jobs", "url": "https://in.indeed.com/jobs?q=embedded+engineer"},
+                        {"text": "📢 Share Channel", "url": "https://t.me/share/url?url=ECE+Job+Alerts"}
+                    ]]
+                }
+            }
+
+        try:
+            resp = requests.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=15)
+            resp.raise_for_status()
+            logger.info(f"Daily digest sent ({len(jobs)} jobs)")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"Digest post failed: {e}")
+            return False
