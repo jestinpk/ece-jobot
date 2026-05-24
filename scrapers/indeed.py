@@ -1,54 +1,61 @@
 """
-Indeed scraper — uses RSS feeds for ECE job searches.
-No API key required for RSS.
+Indeed India scraper — RSS feeds targeting India locations.
 """
 
 import logging
 import feedparser
-from utils.filters import BaseScraper, is_ece_job, extract_skills
+from utils.filters import BaseScraper, is_ece_job, extract_skills, HEADERS
 
 logger = logging.getLogger(__name__)
 
-# Indeed RSS feed URLs for ECE-related searches
+# Indeed India RSS feeds — all pinned to l=India
 INDEED_RSS_FEEDS = [
-    "https://www.indeed.com/rss?q=embedded+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=VLSI+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=firmware+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=FPGA+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=PCB+hardware+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=IoT+electronics+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=telecom+RF+engineer&l=&sort=date",
-    "https://www.indeed.com/rss?q=robotics+engineer&l=&sort=date",
+    "https://in.indeed.com/rss?q=embedded+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=VLSI+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=firmware+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=FPGA+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=electronics+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=hardware+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=IoT+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=PCB+design+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=semiconductor+engineer&l=India&sort=date",
+    "https://in.indeed.com/rss?q=robotics+engineer&l=India&sort=date",
 ]
 
 
 class IndeedScraper(BaseScraper):
-    source = "Indeed"
+    source = "Indeed India"
 
     def scrape(self) -> list[dict]:
         jobs = []
         seen_links = set()
+        fetch_count = 0
+        skip_count = 0
 
         for feed_url in INDEED_RSS_FEEDS:
             try:
-                feed = feedparser.parse(feed_url)
+                feed = feedparser.parse(feed_url, request_headers=HEADERS)
+                fetch_count += len(feed.entries)
+
                 for entry in feed.entries:
                     title = entry.get("title", "")
                     summary = entry.get("summary", "")
                     link = entry.get("link", "")
 
-                    if link in seen_links:
+                    if not link or link in seen_links:
+                        skip_count += 1
                         continue
                     seen_links.add(link)
 
                     if not is_ece_job(title, summary):
+                        skip_count += 1
                         continue
 
-                    # Parse company and location from title (format: "Title - Company - Location")
-                    parts = title.split(" - ")
-                    job_title = parts[0].strip() if parts else title
-                    company = parts[1].strip() if len(parts) > 1 else "Unknown"
-                    location = parts[2].strip() if len(parts) > 2 else "Not specified"
+                    # Indeed title format: "Job Title - Company - Location"
+                    parts = [p.strip() for p in title.split(" - ")]
+                    job_title = parts[0] if parts else title
+                    company = parts[1] if len(parts) > 1 else "Unknown"
+                    location = parts[2] if len(parts) > 2 else "India"
 
                     skills = extract_skills(f"{title} {summary}")
                     jobs.append(self.make_job(
@@ -59,7 +66,9 @@ class IndeedScraper(BaseScraper):
                         skills=skills,
                         description=summary,
                     ))
-            except Exception as e:
-                logger.error(f"Indeed RSS feed error ({feed_url}): {e}", exc_info=True)
 
+            except Exception as e:
+                logger.error(f"Indeed India RSS error [{feed_url}]: {e}")
+
+        logger.info(f"Indeed India: fetched {fetch_count} entries → {len(jobs)} ECE jobs (skipped {skip_count})")
         return jobs

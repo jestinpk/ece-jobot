@@ -1,5 +1,5 @@
 """
-Internshala scraper — targets jobs (not just internships) for ECE roles in India.
+Instahyre scraper — curated India tech jobs, ECE/hardware roles.
 """
 
 import logging
@@ -9,20 +9,20 @@ from utils.filters import BaseScraper, is_ece_job, extract_skills, HEADERS
 
 logger = logging.getLogger(__name__)
 
-INTERNSHALA_URLS = [
-    "https://internshala.com/jobs/electronics-jobs/",
-    "https://internshala.com/jobs/embedded-systems-jobs/",
-    "https://internshala.com/jobs/iot-jobs/",
-    "https://internshala.com/jobs/hardware-jobs/",
-    "https://internshala.com/jobs/vlsi-jobs/",
-    "https://internshala.com/internships/electronics-internship/",
-    "https://internshala.com/internships/embedded-systems-internship/",
-    "https://internshala.com/internships/iot-internship/",
+_HEADERS = {**HEADERS, "Referer": "https://www.instahyre.com/"}
+
+INSTAHYRE_URLS = [
+    "https://www.instahyre.com/jobs/embedded-engineer/",
+    "https://www.instahyre.com/jobs/firmware-engineer/",
+    "https://www.instahyre.com/jobs/electronics-engineer/",
+    "https://www.instahyre.com/jobs/hardware-engineer/",
+    "https://www.instahyre.com/jobs/vlsi-engineer/",
+    "https://www.instahyre.com/jobs/iot-engineer/",
 ]
 
 
-class IntershalaScraper(BaseScraper):
-    source = "Internshala"
+class InstaHyreScraper(BaseScraper):
+    source = "Instahyre"
 
     def scrape(self) -> list[dict]:
         jobs = []
@@ -30,40 +30,35 @@ class IntershalaScraper(BaseScraper):
         fetch_count = 0
         skip_count = 0
 
-        for url in INTERNSHALA_URLS:
+        for url in INSTAHYRE_URLS:
             try:
-                resp = requests.get(url, headers=HEADERS, timeout=20)
+                resp = requests.get(url, headers=_HEADERS, timeout=20)
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.text, "html.parser")
 
-                # Try multiple card selectors (Internshala updates their markup)
                 cards = (
-                    soup.select(".individual_internship") or
-                    soup.select(".internship_meta") or
-                    soup.select('[data-internship_id]') or
-                    soup.select('[data-job_id]') or
-                    soup.select(".job_profile")
+                    soup.select(".job-card") or
+                    soup.select(".opportunity-card") or
+                    soup.select("[class*='JobCard']") or
+                    soup.select(".jobs-list .item")
                 )
                 fetch_count += len(cards)
 
                 for card in cards:
                     try:
                         title_el = (
-                            card.select_one(".profile a") or
-                            card.select_one(".job-title a") or
+                            card.select_one(".job-title") or
+                            card.select_one("h2 a") or
                             card.select_one("h3 a") or
-                            card.select_one("a.job-title-href")
+                            card.select_one("a[href*='/candidate/opportunities/']")
                         )
                         company_el = (
-                            card.select_one(".company_name a") or
                             card.select_one(".company-name") or
-                            card.select_one(".company_name")
+                            card.select_one(".employer-name")
                         )
                         location_el = (
-                            card.select_one(".location_link") or
-                            card.select_one(".location span") or
-                            card.select_one(".job-location") or
-                            card.select_one(".ic-16-map-pin")
+                            card.select_one(".location") or
+                            card.select_one(".job-location")
                         )
 
                         if not title_el:
@@ -75,7 +70,7 @@ class IntershalaScraper(BaseScraper):
                         location = location_el.get_text(strip=True) if location_el else "India"
 
                         href = title_el.get("href", "")
-                        link = f"https://internshala.com{href}" if href.startswith("/") else href
+                        link = f"https://www.instahyre.com{href}" if href.startswith("/") else href
 
                         if not link or link in seen:
                             skip_count += 1
@@ -92,17 +87,16 @@ class IntershalaScraper(BaseScraper):
                             company=company,
                             location=location or "India",
                             link=link,
-                            eligibility="B.E./B.Tech ECE/EEE/Instrumentation",
                             skills=skills,
                         ))
                     except Exception as e:
-                        logger.debug(f"Internshala card parse error: {e}")
+                        logger.debug(f"Instahyre card parse error: {e}")
                         skip_count += 1
 
             except requests.RequestException as e:
-                logger.error(f"Internshala request failed [{url}]: {e}")
+                logger.error(f"Instahyre request failed [{url}]: {e}")
             except Exception as e:
-                logger.error(f"Internshala scrape error [{url}]: {e}", exc_info=True)
+                logger.error(f"Instahyre scrape error [{url}]: {e}", exc_info=True)
 
-        logger.info(f"Internshala: fetched {fetch_count} cards → {len(jobs)} ECE jobs (skipped {skip_count})")
+        logger.info(f"Instahyre: fetched {fetch_count} cards → {len(jobs)} ECE jobs (skipped {skip_count})")
         return jobs
